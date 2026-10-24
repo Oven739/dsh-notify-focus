@@ -1,7 +1,9 @@
-# Preserve the forwarder's line endings exactly.
-# VBScript under Windows Script Host is sensitive to them: with LF-only, wsh
-# reports 800A0401 and never runs the script.
-*.vbs -text
+# Force CRLF for the VBS forwarder on checkout.
+# This file is NOT merely style-sensitive: Windows Script Host rejects LF-only
+# with 800A0401 and never runs it, which silently breaks every toast click.
+# `text eol=crlf` normalises to LF in the index and restores CRLF on checkout,
+# so the working tree always gets the form wscript needs.
+*.vbs text eol=crlf
 
-# Keep PowerShell scripts as authored; they are read as-is by powershell.exe.
+# PowerShell reads either ending fine, but keep the authored bytes as-is.
 *.ps1 -text
