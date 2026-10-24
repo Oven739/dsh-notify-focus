@@ -1,0 +1,15 @@
+# dsh-notify-focus bundle patch (local fork of dsh-notify-windows 0.8.1).
+#
+# Same single loader entry as upstream; the only change is the package name,
+# so this fork can be linked beside the published package and rolled back by
+# reinstalling dsh-notify-windows.
+#
+# Foreground suppression is on by default: while the DSH host owns the
+# foreground window no toast is shown at all (see lib/index.js +
+# lib/notify.ps1), matching ZCode's desktop client behaviour.
+#
+# Install: pnpm --dir ~/.dsh/profiles/<profile> add link:G:/DSH/dsh-notify-focus
+# then add "dsh-notify-focus" to dsh.profile.bundles in the profile package.json.
+- insert:
+    - id: dsh-notify
+      name: dsh-notify-focus

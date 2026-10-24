@@ -1,0 +1,7 @@
+# Runtime artifacts and scratch never belong in the baseline.
+node_modules/
+*.log
+_*.mjs
+_*.ps1
+_*.vbs
+.DS_Store

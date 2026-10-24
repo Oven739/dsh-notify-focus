@@ -1,0 +1,71 @@
+{
+  "name": "dsh-notify-focus",
+  "version": "0.8.1-focus.1",
+  "description": "DeepSeek Harness (DSH) 插件：任务完成 / 等待审批 / 等待回答时发送 Windows 系统桌面通知（本地 fork：宿主窗口在前台时不打扰，参照 ZCode 桌面端）",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SeverusZh/dsh-notify-windows.git"
+  },
+  "homepage": "https://github.com/SeverusZh/dsh-notify-windows",
+  "bugs": {
+    "url": "https://github.com/SeverusZh/dsh-notify-windows/issues"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "CHANGELOG.md"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.1.5-rc.1"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ]
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.1.5-rc.1": "compatible",
+        "0.1.5-rc.2": "compatible",
+        "0.1.6-alpha.2": "compatible",
+        "0.1.7-rc.1": "compatible",
+        "0.1.7-rc.2": "compatible",
+        "0.2.0-rc.1": "compatible",
+        "0.2.1-rc.1": "compatible",
+        "0.2.1-rc.2": "compatible"
+      },
+      "node": ">=20"
+    }
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "notify",
+    "toast",
+    "windows"
+  ]
+}

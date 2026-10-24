@@ -1,0 +1,7 @@
+# Preserve the forwarder's line endings exactly.
+# VBScript under Windows Script Host is sensitive to them: with LF-only, wsh
+# reports 800A0401 and never runs the script.
+*.vbs -text
+
+# Keep PowerShell scripts as authored; they are read as-is by powershell.exe.
+*.ps1 -text
