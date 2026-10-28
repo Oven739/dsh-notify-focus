@@ -192,10 +192,15 @@ public class Win32WindowFinder {
   // Focus candidates by owning process id. This is what actually identifies a
   // DSH window: title text is the page title, so it carries no port cue.
   public static List<IntPtr> FindByPid(string classNamePrefix, HashSet<int> pids) {
-    var result = new List<IntPtr>();
+    var visible = new List<IntPtr>();
+    var hidden = new List<IntPtr>();
     EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
       try {
-        if (!IsWindowVisible(hWnd)) return true;
+        // Hidden windows are collected too, and ranked after visible ones.
+        // The app's "minimized" state is a hidden window (measured:
+        // vis=False iconic=False), so filtering invisible windows here meant
+        // the very window we needed to restore was never a candidate.
+        bool isVisible = IsWindowVisible(hWnd);
         var cls = new StringBuilder(256);
         GetClassName(hWnd, cls, cls.Capacity);
         // Prefix match, not equality: Electron tags its windows
@@ -208,11 +213,13 @@ public class Win32WindowFinder {
         var title = new StringBuilder(512);
         GetWindowText(hWnd, title, title.Capacity);
         if (title.Length == 0) return true;
-        result.Add(hWnd);
+        if (isVisible) visible.Add(hWnd); else hidden.Add(hWnd);
       } catch {}
       return true;
     }, IntPtr.Zero);
-    return result;
+    // Visible first: never hide a window that was already on screen.
+    visible.AddRange(hidden);
+    return visible;
   }
 
   public static string GetTitle(IntPtr hWnd) {
@@ -274,16 +281,34 @@ function Invoke-Win32Focus {
     }
     if ($best -eq $null) { $best = $wins[0] }
 
-    if ([Win32WindowFinder]::IsIconic($best)) {
+    # Restore/show ONLY when the window is actually hidden or minimised.
+    #
+    # Calling ShowWindow unconditionally re-applies the requested placement, which
+    # rewrites the window's current shape: a maximised window snapped back to its
+    # restored size, and a window the user had sized deliberately lost that size.
+    # The observed symptom was "jumping changes the window's form instead of just
+    # covering it".
+    #
+    # The app's "minimized" state is a HIDDEN window, not an iconic one (measured
+    # vis=False iconic=False), so both states are handled, and each call is gated
+    # on the state it fixes.
+    $wasVisible = [Win32WindowFinder]::IsWindowVisible($best)
+    $wasIconic = [Win32WindowFinder]::IsIconic($best)
+    if ($wasIconic) {
       [void][Win32WindowFinder]::ShowWindow($best, 9)  # SW_RESTORE
+    }
+    if (-not $wasVisible) {
+      [void][Win32WindowFinder]::ShowWindow($best, 5)  # SW_SHOW
     }
     $ok = [Win32WindowFinder]::SetForegroundWindow($best)
     if (-not $ok) {
-      [void][Win32WindowFinder]::ShowWindow($best, 5)  # SW_SHOW
-      $ok = [Win32WindowFinder]::SetForegroundWindow($best)
+      # Foreground rights can be refused; the window is at least visible now.
+      Write-Trace ("[win32] SetForegroundWindow refused, window shown but not raised")
     }
-    Write-Trace ("[win32] focused hwnd=" + $best.ToString() + " ok=" + $ok)
-    return $true
+    $visible = [Win32WindowFinder]::IsWindowVisible($best)
+    $iconic = [Win32WindowFinder]::IsIconic($best)
+    Write-Trace ("[win32] focused hwnd=" + $best.ToString() + " ok=" + $ok + " visible=" + $visible + " iconic=" + $iconic)
+    return ($ok -or $visible)
   } catch {
     Write-Trace ("[fail step] Invoke-Win32Focus: " + $_.Exception.Message)
     return $false
