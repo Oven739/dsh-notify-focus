@@ -19,28 +19,72 @@ function Read-DecisionEndpoint {
   # The plugin writes 127.0.0.1:<port> plus a request secret while it runs.
   # Returns $null when the host is gone (nothing to post a decision to).
   #
-  # Two locations are searched because the two sides see different TEMP roots:
-  # the DSH host runs with TEMP redirected to its own private directory
-  # (%LOCALAPPDATA%\DSH\temp\dsh-<id>\...), while this script is started by the
-  # shell's protocol handler under the plain user TEMP. Looking only at $env:TEMP
-  # made every button click report "no endpoint file" even while the host was up.
+  # ONLY the host's private temp is a real candidate.
+  #
+  # The plugin writes to `tmpdir()` of the HOST process (decision-channel.mjs:29),
+  # and the host runs with TEMP redirected to %LOCALAPPDATA%\DSH\temp. This script
+  # runs under the protocol handler, whose $env:TEMP is the plain user temp. Those
+  # two roots can never be equal, so "$env:TEMP\dsh-notify" is not a second
+  # location the plugin might use — it is an orphan path the plugin never writes.
+  #
+  # It used to be probed first. A leftover file there (from any older build, any
+  # previous TEMP layout) then hijacked every click: the file parses, it is
+  # returned, and the click targets a port nothing listens on any more. On
+  # 2026-11-06 that produced 12 consecutive "jump offer skipped" failures while
+  # the real endpoint sat in the host temp, correct and live.
   $candidates = @(
-    (Join-Path $env:TEMP "dsh-notify\endpoint.json"),
     (Join-Path $env:LOCALAPPDATA "DSH\temp\dsh-notify\endpoint.json")
   )
+
+  # A file that parses is not the same as a file that is CURRENT.
+  #
+  # These files outlive the process that wrote them: the plugin removes its own
+  # endpoint on shutdown, but a kill or a crash leaves the file behind, still
+  # holding a port that nothing listens on any more. Returning the first file
+  # that merely parses then routes every click to a dead port, which reads on
+  # screen as "the window comes forward but the conversation never changes".
+  #
+  # So candidates are ranked by freshness and each one is probed before use.
+  $best = $null
+  $bestRank = $null
   foreach ($file in $candidates) {
     try {
       if (-not (Test-Path $file)) { continue }
       $obj = (Get-Content -Path $file -Raw -ErrorAction Stop) | ConvertFrom-Json
-      if ($obj.port -and $obj.secret) {
-        Write-Trace ("[endpoint] using " + $file + " port=" + $obj.port)
-        return $obj
+      if (-not $obj.port -or -not $obj.secret) { continue }
+
+      $fresh = (Get-Item $file).LastWriteTime
+      # Reachability is the decisive test: a live listener on the recorded port
+      # proves this endpoint belongs to a running plugin.
+      $alive = $false
+      try {
+        $probe = New-Object System.Net.Sockets.TcpClient
+        $alive = $probe.ConnectAsync('127.0.0.1', [int]$obj.port).Wait(300)
+        $probe.Close()
+      } catch {
+        $alive = $false
+      }
+      Write-Trace ("[endpoint] candidate " + $file + " port=" + $obj.port + " alive=" + $alive + " mtime=" + $fresh.ToString('MM-dd HH:mm:ss'))
+
+      # Only a live listener is usable. A file whose port is closed describes a
+      # plugin that has already exited: posting to it can only fail, and failing
+      # late looks like "the click did nothing". Returning nothing at least lets
+      # the caller fall back to opening the GUI immediately.
+      if (-not $alive) { continue }
+      $rank = @{ alive = 1; fresh = $fresh }
+      if ($best -eq $null -or $rank.fresh -gt $bestRank.fresh) {
+        $best = $obj; $bestRank = $rank; $bestFile = $file
       }
     } catch {
       Write-Trace ("[warn] Read-DecisionEndpoint " + $file + ": " + $_.Exception.Message)
     }
   }
-  Write-Trace ("[fail] no endpoint file in: " + ($candidates -join " | "))
+
+  if ($best -ne $null) {
+    Write-Trace ("[endpoint] using " + $bestFile + " port=" + $best.port + " alive=" + $bestRank.alive)
+    return $best
+  }
+  Write-Trace ("[fail] no usable endpoint file in: " + ($candidates -join " | "))
   return $null
 }
 
