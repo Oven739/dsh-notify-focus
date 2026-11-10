@@ -443,8 +443,6 @@ function Main {
   # which Chromium throttles hard for a hidden window (measured: 6183 ms, median
   # 213 ms elsewhere). Queueing first makes the focus-triggered poll the one that
   # delivers.
-  $jumpQueued = $false
-  $jumpSession = ""
   if ($targetUrl -match "[?&]session=([^&]+)") {
     $jumpSession = [uri]::UnescapeDataString($Matches[1])
     if ($jumpSession -ne "") {
@@ -456,7 +454,6 @@ function Main {
           $jumpResp = Invoke-RestMethod -Uri $jumpUrl -Method Post -Body $jumpBody `
             -ContentType "application/json" -TimeoutSec 3 `
             -Headers @{ "x-dsh-notify-secret" = $jumpEndpoint.secret } -ErrorAction Stop
-          $jumpQueued = [bool]$jumpResp.ok
           Write-Trace ("[jump] queued " + $jumpSession + " before focus -> " + $jumpResp.ok)
         } else {
           Write-Trace "[step] jump skipped: no live endpoint"
@@ -467,20 +464,17 @@ function Main {
     }
   }
 
-  # Step A: focus first, navigate second.
+  # Focus the window (the step that used to be "Step B").
   #
-  # Order matters for latency: the user clicks a toast to get back to DSH, and
-  # focusing an existing window achieves that immediately. CDP navigation is an
-  # upgrade (jump to the exact session) that costs ~5 s of connection timeouts
-  # when no debugger is listening - which is always the case for the packaged
-  # desktop app. Running it first made every click flash a console for ~8 s
-  # before the window even came forward.
-  $focusedAlready = $false
+  # This runs before any navigation attempt: the user clicks a toast to get back
+  # to DSH, and raising an existing window achieves that immediately. CDP
+  # navigation is an optional upgrade that costs ~5 s of connection timeouts
+  # when no debugger is listening - always the case for the packaged desktop app
+  # - so it must never delay the window coming forward.
   try {
     if (Invoke-Win32Focus -HostPort $HostPort -MatchTitles $MatchTitles) {
       Write-Trace ("[ok] Step B focused existing DSH window (focus-only)")
       $handled = $true
-      $focusedAlready = $true
     } else {
       Write-Trace ("[step] Step B no candidate")
     }
@@ -499,7 +493,7 @@ function Main {
   # external process POSTing to them gets 401.
   # (The jump was queued before the window was raised - see the block above.)
 
-  # Step A: CDP navigate - opt-in only.
+  # Optional CDP navigation - opt-in only.
   #
   # Probing three debug ports costs ~1 s each (~3.1 s total) and can never
   # succeed for the packaged desktop app, which exposes no debugger. It stays
@@ -518,7 +512,7 @@ function Main {
     }
   }
 
-  # Step C: fallback open in default browser. Always runs if A and B failed.
+  # Fallback: open the URL in the default browser when no window was raised.
   if (-not $handled) {
     try {
       Write-Trace ("[fallback] Start-Process " + $targetUrl)
