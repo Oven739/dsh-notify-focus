@@ -33,6 +33,20 @@ ApprovalService.request
 
 这条约束由 `skipWhenHostFocused` 与监听器共同实现，两者不能各自为政。
 
+**前台时的三个分支**（`approval/request` 监听器）：
+
+| 情形 | 动作 |
+|---|---|
+| 前台 + 本会话在屏幕上 | 直接 `next()`，不打扰 |
+| 前台 + **别的**会话在屏幕上 | 发**不带按钮**的 toast，然后 `next()` |
+| 不在前台（人不在） | park，toast 带按钮 |
+
+第二行曾经错误地 park，导致人明明坐在电脑前却只剩 toast、浏览器没有卡片。
+**toast 和浏览器卡片可以共存，toast 和被 park 的卡片不能共存。**
+
+日志里区分这两个分支：`waterfall-handed-to-browser` /
+`waterfall-notified-other-session`（前台，只通知）/ `approval-parked`（人不在，park）。
+
 ### 2. 只有 `approval/request` 和 `user-questions/request` 是 waterfall
 
 转发的白名单里其余全是 `mode: "emit"`（`api-remotes/lib/types/remote-events.d.ts`）。只有这两个能 park。

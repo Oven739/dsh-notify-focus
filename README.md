@@ -70,8 +70,9 @@
 > node test/focus-gate.test.mjs          # 8  - 前台采样与保守回退
 > node test/decision-registry.test.mjs   # 8  - token 生命周期与一次性语义
 > node test/toast-dedupe.test.mjs        # 4  - 同一审批不重复通知
-> node test/session-gate.test.mjs        # 5  - 会话级抑制判定
+> node test/session-gate.test.mjs        # 8  - 会话级抑制判定
 > node test/endpoint-selection.test.mjs  # 5  - 只认活端口，全死返回 null
+> node test/approval-action.test.mjs     # 5  - 什么时候 park、什么时候只是通知
 > ```
 >
 > `node --test <dir>` 在受限沙箱下会因 spawn EPERM 失败，所以逐个跑。
