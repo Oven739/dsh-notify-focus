@@ -131,7 +131,7 @@ if ($clickable) {
     $root = $xml.DocumentElement
     # XmlElement.Name is EMPTY under the PowerShell 5.1 WinRT projection (the
     # tag name lives on TagName), so guarding on -eq "toast" silently skipped
-    # every attribute and the toast shipped with no launch target — a click then
+    # every attribute and the toast shipped with no launch target - a click then
     # did nothing at all. Compare TagName instead, and fall back to setting the
     # attributes unconditionally: worst case the document is not a toast and
     # SetAttribute throws into the catch below.

@@ -25,7 +25,7 @@ function Read-DecisionEndpoint {
   # and the host runs with TEMP redirected to %LOCALAPPDATA%\DSH\temp. This script
   # runs under the protocol handler, whose $env:TEMP is the plain user temp. Those
   # two roots can never be equal, so "$env:TEMP\dsh-notify" is not a second
-  # location the plugin might use — it is an orphan path the plugin never writes.
+  # location the plugin might use - it is an orphan path the plugin never writes.
   #
   # It used to be probed first. A leftover file there (from any older build, any
   # previous TEMP layout) then hijacked every click: the file parses, it is
@@ -292,7 +292,7 @@ function Invoke-Win32Focus {
     # under a restricted token, which made this whole script hang.
     # Candidate processes: browsers, plus every DSH host process. The desktop
     # app is Electron, so its windows use Chrome's window class but its process
-    # is "DeepSeek Harness" — a chrome-only list never matched it.
+    # is "DeepSeek Harness" - a chrome-only list never matched it.
     $candPids = New-Object System.Collections.Generic.HashSet[int]
     foreach ($p in (Get-Process chrome -ErrorAction SilentlyContinue)) { [void]$candPids.Add($p.Id) }
     foreach ($p in (Get-Process msedge -ErrorAction SilentlyContinue)) { [void]$candPids.Add($p.Id) }
@@ -307,7 +307,7 @@ function Invoke-Win32Focus {
     }
 
     # Match on process id, NOT on title. A DSH window's title is the page title
-    # ("Greeting — Claude"), never "127.0.0.1:<port>", so a title cue misses the
+    # ("Greeting - Claude"), never "127.0.0.1:<port>", so a title cue misses the
     # very window the user wants focused.
     $wins = [Win32WindowFinder]::FindByPid("Chrome_WidgetWin_", $candPids)
     if ($wins -eq $null -or $wins.Count -eq 0) {
@@ -383,7 +383,7 @@ function Main {
   # not a mistake in the notification. Matching only "^answer\?" silently sent
   # every button click down the "open the GUI" fallback instead of answering.
   if ($stripped -match "^answer/?\?") {
-    # Start AFTER the "?" — keeping it would make the first key "?t" instead of
+    # Start AFTER the "?" - keeping it would make the first key "?t" instead of
     # "t", so the token would never be found and every click would fall through
     # to "bad answer activation".
     $query = $stripped.Substring($stripped.IndexOf("?") + 1)
@@ -439,7 +439,7 @@ function Main {
   #
   # The page polls on regaining focus, so the order of these two operations
   # decides whether that immediate poll finds anything. Focusing first meant the
-  # page woke up, polled an empty queue, and then waited for its next tick —
+  # page woke up, polled an empty queue, and then waited for its next tick -
   # which Chromium throttles hard for a hidden window (measured: 6183 ms, median
   # 213 ms elsewhere). Queueing first makes the focus-triggered poll the one that
   # delivers.
@@ -472,7 +472,7 @@ function Main {
   # Order matters for latency: the user clicks a toast to get back to DSH, and
   # focusing an existing window achieves that immediately. CDP navigation is an
   # upgrade (jump to the exact session) that costs ~5 s of connection timeouts
-  # when no debugger is listening — which is always the case for the packaged
+  # when no debugger is listening - which is always the case for the packaged
   # desktop app. Running it first made every click flash a console for ~8 s
   # before the window even came forward.
   $focusedAlready = $false
@@ -497,9 +497,9 @@ function Main {
   # This goes through the plugin's authenticated loopback port, not the page's
   # same-origin fetch routes: those require the browser's auth cookie, and an
   # external process POSTing to them gets 401.
-  # (The jump was queued before the window was raised — see the block above.)
+  # (The jump was queued before the window was raised - see the block above.)
 
-  # Step A: CDP navigate — opt-in only.
+  # Step A: CDP navigate - opt-in only.
   #
   # Probing three debug ports costs ~1 s each (~3.1 s total) and can never
   # succeed for the packaged desktop app, which exposes no debugger. It stays
