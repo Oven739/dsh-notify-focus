@@ -4,11 +4,11 @@
   "description": "DeepSeek Harness (DSH) 插件：任务完成 / 等待审批 / 等待回答时发送 Windows 系统桌面通知。前台不打扰、审批可直接在通知上批准、点击通知跳转到对应会话。",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/aklnaaw/dsh-notify-focus.git"
+    "url": "git+https://github.com/Oven739/dsh-notify-focus.git"
   },
-  "homepage": "https://github.com/aklnaaw/dsh-notify-focus",
+  "homepage": "https://github.com/Oven739/dsh-notify-focus",
   "bugs": {
-    "url": "https://github.com/aklnaaw/dsh-notify-focus/issues"
+    "url": "https://github.com/Oven739/dsh-notify-focus/issues"
   },
   "type": "module",
   "main": "lib/index.js",

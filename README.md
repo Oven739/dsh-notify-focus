@@ -6,7 +6,7 @@
 > ### 安装
 >
 > ```powershell
-> dsh plugin --profile desktop add github:aklnaaw/dsh-notify-focus
+> dsh plugin --profile desktop add github:Oven739/dsh-notify-focus
 > ```
 >
 > 装完**重启 DSH 宿主**（插件发现只在启动时扫描）。
