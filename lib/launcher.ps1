@@ -435,6 +435,38 @@ function Main {
 
   $handled = $false
 
+  # Queue the jump BEFORE raising the window.
+  #
+  # The page polls on regaining focus, so the order of these two operations
+  # decides whether that immediate poll finds anything. Focusing first meant the
+  # page woke up, polled an empty queue, and then waited for its next tick —
+  # which Chromium throttles hard for a hidden window (measured: 6183 ms, median
+  # 213 ms elsewhere). Queueing first makes the focus-triggered poll the one that
+  # delivers.
+  $jumpQueued = $false
+  $jumpSession = ""
+  if ($targetUrl -match "[?&]session=([^&]+)") {
+    $jumpSession = [uri]::UnescapeDataString($Matches[1])
+    if ($jumpSession -ne "") {
+      try {
+        $jumpEndpoint = Read-DecisionEndpoint
+        if ($jumpEndpoint -ne $null) {
+          $jumpUrl = "http://127.0.0.1:" + $jumpEndpoint.port + "/jump"
+          $jumpBody = ConvertTo-Json -Compress @{ sessionId = $jumpSession }
+          $jumpResp = Invoke-RestMethod -Uri $jumpUrl -Method Post -Body $jumpBody `
+            -ContentType "application/json" -TimeoutSec 3 `
+            -Headers @{ "x-dsh-notify-secret" = $jumpEndpoint.secret } -ErrorAction Stop
+          $jumpQueued = [bool]$jumpResp.ok
+          Write-Trace ("[jump] queued " + $jumpSession + " before focus -> " + $jumpResp.ok)
+        } else {
+          Write-Trace "[step] jump skipped: no live endpoint"
+        }
+      } catch {
+        Write-Trace ("[step] jump queue skipped: " + $_.Exception.Message)
+      }
+    }
+  }
+
   # Step A: focus first, navigate second.
   #
   # Order matters for latency: the user clicks a toast to get back to DSH, and
@@ -465,26 +497,7 @@ function Main {
   # This goes through the plugin's authenticated loopback port, not the page's
   # same-origin fetch routes: those require the browser's auth cookie, and an
   # external process POSTing to them gets 401.
-  if ($handled -and $targetUrl -match "[?&]session=([^&]+)") {
-    $sessionId = [uri]::UnescapeDataString($Matches[1])
-    $endpoint = Read-DecisionEndpoint
-    if ($sessionId -ne "" -and $endpoint -ne $null) {
-      try {
-        $url = "http://127.0.0.1:" + $endpoint.port + "/jump"
-        $payload = ConvertTo-Json -Compress @{ sessionId = $sessionId }
-        $resp = Invoke-RestMethod -Uri $url -Method Post -Body $payload `
-          -ContentType "application/json" -TimeoutSec 3 `
-          -Headers @{ "x-dsh-notify-secret" = $endpoint.secret } -ErrorAction Stop
-        Write-Trace ("[jump] offered " + $sessionId + " -> " + $resp.ok)
-      } catch {
-        # Host gone or plugin without the browser half: the window is already
-        # focused, which is the pre-jump behaviour.
-        Write-Trace ("[step] jump offer skipped: " + $_.Exception.Message)
-      }
-    } elseif ($endpoint -eq $null) {
-      Write-Trace "[step] jump skipped: no endpoint file"
-    }
-  }
+  # (The jump was queued before the window was raised — see the block above.)
 
   # Step A: CDP navigate — opt-in only.
   #

@@ -1,7 +1,47 @@
-> ## 本仓库是本地 fork
+> ## dsh-notify-focus
 >
-> 上游：[SeverusZh/dsh-notify-windows](https://github.com/SeverusZh/dsh-notify-windows) 0.8.1（MIT）。
-> 包名已改为 `dsh-notify-focus`，可与上游并存安装，便于回滚。
+> `dsh-notify-windows` 的独立 fork（上游 [SeverusZh/dsh-notify-windows](https://github.com/SeverusZh/dsh-notify-windows) 0.8.1，MIT）。
+> 包名不同，可与上游并存安装，便于回滚。
+>
+> ### 安装
+>
+> ```powershell
+> dsh plugin --profile desktop add github:aklnaaw/dsh-notify-focus
+> ```
+>
+> 装完**重启 DSH 宿主**（插件发现只在启动时扫描）。
+>
+> > `profile` 按实际使用填：桌面端是 `desktop`，Web 端是 `web`。
+> > 部分版本禁止 CLI 管理 `desktop` profile，此时改用：
+> > `pnpm --dir "$env:USERPROFILE\.dsh\profiles\desktop" add "link:<本仓库路径>"`，
+> > 再把 `dsh-notify-focus` 加进该 profile `package.json` 的 `dsh.profile.bundles`。
+>
+> ### 配置
+>
+> 在 `$env:USERPROFILE\.dsh\profiles\<profile>\cordis.patch.yml` 里按 id 覆盖（热监视，保存即生效）：
+>
+> ```yaml
+> - id: dsh-notify
+>   name: dsh-notify-focus
+>   config:
+>     jumpEnabled: true          # 点通知跳转到对应会话；false = 只聚焦窗口
+>     skipWhenHostFocused: true  # 正在看的会话不弹通知
+>     reasons: [completed, error, max-tokens]
+> ```
+>
+> ### 日志
+>
+> `%LOCALAPPDATA%\DSH\temp\dsh-notify\notify.log`
+> 关键事件：`approval-parked`、`toast-actionable`、`decision`、`jump-offered`、`jump-consumed`、`jump-outcome`。
+> **验收跳转是否成功看 `jump-outcome result=ok`**，不要看 launcher 的 `[jump] offered`（那只是入队）。
+>
+> ### 卸载
+>
+> ```powershell
+> dsh plugin --profile desktop remove dsh-notify-focus
+> ```
+>
+> 协议注册残留在 `HKCU\Software\Classes\dshnotify`，如需彻底清除手动删除该键。
 >
 > **本 fork 的变更**
 >
