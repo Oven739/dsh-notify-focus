@@ -1,6 +1,14 @@
 # dsh-notify launcher (Windows PowerShell 5.1).
-# Registered as the "dshnotify" protocol handler. Invoked by the OS as:
-#   powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "launcher.ps1" "%1"
+#
+# Invoked by the OS as the "dshnotify" protocol handler, but through a forwarder,
+# not directly:
+#   wscript.exe //B //Nologo "<plugin>\lib\forward.vbs" "%1"
+#       -> powershell.exe -NoProfile -ExecutionPolicy Bypass -File "launcher.ps1" "%1"
+#
+# The indirection exists to remove a console flash. powershell.exe is a
+# WINDOWS_CUI image, so the OS creates its console before any script argument
+# can take effect; -WindowStyle Hidden only shrinks it to ~250 ms. wscript.exe is
+# WINDOWS_GUI and owns no console, so the child console is hidden at creation.
 #
 # Two URL shapes:
 #   dshnotify://answer?t=<token>&v=allow|reject   -> POST the decision to the
@@ -168,7 +176,7 @@ function Invoke-CdpNavigate {
   return $false
 }
 
-# Win32 P/Invoke type compiled once for Step B.
+# Win32 P/Invoke type compiled once, used by the focus path.
 $win32Source = @'
 using System;
 using System.Collections.Generic;
@@ -464,7 +472,7 @@ function Main {
     }
   }
 
-  # Focus the window (the step that used to be "Step B").
+  # Focus the window.
   #
   # This runs before any navigation attempt: the user clicks a toast to get back
   # to DSH, and raising an existing window achieves that immediately. CDP
@@ -473,13 +481,13 @@ function Main {
   # - so it must never delay the window coming forward.
   try {
     if (Invoke-Win32Focus -HostPort $HostPort -MatchTitles $MatchTitles) {
-      Write-Trace ("[ok] Step B focused existing DSH window (focus-only)")
+      Write-Trace ("[ok] focused existing DSH window")
       $handled = $true
     } else {
-      Write-Trace ("[step] Step B no candidate")
+      Write-Trace ("[step] focus: no candidate window")
     }
   } catch {
-    Write-Trace ("[fail step] Step B: " + $_.Exception.Message)
+    Write-Trace ("[fail step] focus: " + $_.Exception.Message)
   }
 
   # Tell the page which conversation to reveal.
@@ -502,13 +510,13 @@ function Main {
   if ($HostPort -ne "" -and $env:DSH_NOTIFY_CDP -eq "1") {
     try {
       if (Invoke-CdpNavigate -TargetUrl $targetUrl -HostPort $HostPort) {
-        Write-Trace ("[ok] Step A CDP navigate succeeded for " + $HostPort)
+        Write-Trace ("[ok] CDP navigate succeeded for " + $HostPort)
         $handled = $true
       } else {
-        Write-Trace ("[step] Step A skipped/failed")
+        Write-Trace ("[step] CDP navigate skipped/failed")
       }
     } catch {
-      Write-Trace ("[fail step] Step A: " + $_.Exception.Message)
+      Write-Trace ("[fail step] CDP navigate: " + $_.Exception.Message)
     }
   }
 
@@ -519,7 +527,7 @@ function Main {
       Start-Process $targetUrl
       $handled = $true
     } catch {
-      Write-Trace ("[fail step] Step C: " + $_.Exception.Message)
+      Write-Trace ("[fail step] browser fallback: " + $_.Exception.Message)
     }
   }
 

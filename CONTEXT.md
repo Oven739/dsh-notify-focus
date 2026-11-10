@@ -86,11 +86,21 @@ answer 失败（token 过期、宿主已退）必须**降级为 open**，不能�
 
 另：取 query 时要跳过 `?` 本身（`IndexOf("?") + 1`），否则第一个 key 是 `?t` 而不是 `t`。
 
-### 两个进程看到不同的 TEMP
+### 两个进程看到不同的 TEMP，但只有一个位置是真候选
 
-DSH 宿主把 `TEMP` 重定向到私有目录（`%LOCALAPPDATA%\DSH\temp\dsh-<id>\`），而协议处理器由系统 shell 启动，用普通用户 TEMP。
+DSH 宿主把 `TEMP` 重定向到私有目录（`%LOCALAPPDATA%\DSH\temp`），协议处理器由系统 shell 启动、用普通用户 TEMP。
 
-endpoint 文件查找**必须同时尝试两个位置**，否则按钮点击永远报 `no endpoint file`。
+插件写的是 `tmpdir()`，即**宿主的** TEMP，所以它只可能产出
+`%LOCALAPPDATA%\DSH\temp\dsh-notify\endpoint.json`。
+`$env:TEMP\dsh-notify\endpoint.json`（协议处理器视角）是插件**永远不会写**的路径。
+
+早期版本把后者也当候选并优先尝试，结果是：任何遗留文件都会劫持每一次点击——
+文件能解析、被返回、然后连到一个早已关闭的端口。2026-11-06 连续 12 次失败即源于此。
+
+现在的规则：
+1. 只认宿主私有 TEMP 一处；
+2. 候选必须**端口可达**（TcpClient 300ms 探活）才可用；
+3. 全都不可达时返回 `$null`，由调用方降级为打开 GUI——而不是返回一个死端口。
 
 ### 事件顺序：审计早于水瀑
 

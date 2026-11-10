@@ -64,8 +64,17 @@
 >
 > 跳转原理：DSH 前端不读 `?session=`，所以由插件自己的浏览器半边轮询宿主队列，调 `ctx.uiWorkspace.openSession()`。详见 [CONTEXT.md](CONTEXT.md)。
 >
-> 测试：`node test/focus-gate.test.mjs`、`node test/decision-registry.test.mjs`、`node test/toast-dedupe.test.mjs`
-> （`node --test <dir>` 在受限沙箱下会因 spawn EPERM 失败，直接跑单文件即可。）
+> 测试（30 个用例，直接跑单文件）：
+>
+> ```powershell
+> node test/focus-gate.test.mjs          # 8  - 前台采样与保守回退
+> node test/decision-registry.test.mjs   # 8  - token 生命周期与一次性语义
+> node test/toast-dedupe.test.mjs        # 4  - 同一审批不重复通知
+> node test/session-gate.test.mjs        # 5  - 会话级抑制判定
+> node test/endpoint-selection.test.mjs  # 5  - 只认活端口，全死返回 null
+> ```
+>
+> `node --test <dir>` 在受限沙箱下会因 spawn EPERM 失败，所以逐个跑。
 
 ---
 
