@@ -73,7 +73,12 @@
 > node test/session-gate.test.mjs        # 8  - 会话级抑制判定
 > node test/endpoint-selection.test.mjs  # 5  - 只认活端口，全死返回 null
 > node test/approval-action.test.mjs     # 5  - 什么时候 park、什么时候只是通知
+> node test/smoke-index.test.mjs         # 4  - 加载真实 index.js，抓未定义符号
 > ```
+>
+> 最后一个是**冒烟测试**：它 import 真正的 `lib/index.js` 并驱动审批路径。
+> 其余测试测的是抽出的模块，接线错误（重构后漏改调用点）它们抓不到——
+> 2026-11-10 的宿主崩溃正是这么溜进去的。
 >
 > `node --test <dir>` 在受限沙箱下会因 spawn EPERM 失败，所以逐个跑。
 

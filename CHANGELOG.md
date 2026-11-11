@@ -3,6 +3,29 @@
 本仓库是 `dsh-notify-windows` 的本地 fork，包名改为 `dsh-notify-focus`。
 上游：https://github.com/SeverusZh/dsh-notify-windows (MIT)
 
+## 0.9.1
+
+### 修复
+
+- **宿主崩溃（严重）**：`0.9.0` 的 `f152864` 把会话判定抽到 `lib/session-gate.mjs` 时，
+  删除了 `index.js` 里的本地 `isOnScreen`，但只更新了 2 处调用，**漏了 6 处**。
+  `node --check` 抓不到（语法合法），单测也抓不到（测的是模块，没 import
+  `index.js`）。只有在审批真正弹出时，`setTimeout` 回调里才抛
+  `ReferenceError: isOnScreen is not defined` —— 未捕获异常直接杀死宿主进程，
+  表现为「应用无法启动或已意外停止」而日志看起来一切正常。
+  6 处调用已全部改为 `sessionGate.isOnScreen(...)`。
+
+- **`spawn()` 同步异常会杀死宿主**：`sendToast` 里 `spawn(POWERSHELL, ...)` 只处理了
+  `child.on("error")`（异步错误），而 `spawn` 本身可以**同步抛出**
+  （受限策略下 EPERM、powershell 缺失时 ENOENT）。该调用位于定时器回调中，
+  同步异常即成未捕获异常。现已包 try/catch：通知发不出去只是通知失败，
+  不该让整个应用退出。
+
+### 新增
+
+- `test/smoke-index.test.mjs`：import **真实的** `lib/index.js` 并驱动审批路径。
+  上面那个崩溃能复发的话，这个测试会失败，而不是等你下次点审批时炸掉宿主。
+
 ## 0.9.0
 
 首个独立发布版本。在上游 0.8.1 基础上的全部改动：
