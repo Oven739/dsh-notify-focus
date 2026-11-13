@@ -85,7 +85,7 @@ Start-Sleep 3
 ```powershell
 cd G:\\DSH\\dsh-notify-focus
 
-# 全部测试（44 个）
+# 全部测试（49 个，8 个文件）
 npm test
 
 # 只跑可移植性相关
@@ -93,8 +93,9 @@ node --test test/forward-vbs-portability.test.mjs
 node --test test/protocol-registration.test.mjs
 ```
 
-> **注意**：`npm test` 的 glob 是 `test/*.test.mjs`，
-> 所以 `test/channel.e2e.mjs`（后缀不是 `.test.mjs`）**从来没被跑过**。
+> `test/channel.e2e.mjs` 是手写脚本（用 `console.log`，无 `test()`），从来不在 `npm test` 的 glob 里。
+> 已改造成 `test/channel.test.mjs`（5 个 `node:test` 用例，含真实回环 HTTP 请求），现在**会被自动执行**。
+> 原脚本保留供手动排查。
 
 ### 反向验证（确认测试有效）
 
@@ -127,5 +128,5 @@ node --test test/protocol-registration.test.mjs
 | 项 | 影响 |
 |---|---|
 | `CONTEXT.md` 部分章节描述旧实现 | 已更新注册相关段落，其余待补 |
-| `test/channel.e2e.mjs` 不在 `npm test` 里 | e2e 覆盖是空的 |
-| 插件目录被移动后，需触发一次通知才会重注册 | 启动预热只覆盖「新装」，不覆盖「移动」 |
+| ~~e2e 覆盖是空的~~ | **已修**：`test/channel.test.mjs` 5 个用例纳入 `npm test` |
+| ~~插件目录被移动后需触发通知~~ | **已实测推翻**：启动预热在 `apply()` 里跑，用新的 `$PSScriptRoot` 注册。移动后**重启 DSH 即可**，不需要等通知 |

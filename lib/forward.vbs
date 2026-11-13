@@ -47,7 +47,7 @@ selfDir = fso.GetParentFolderName(WScript.ScriptFullName)
 launcher = fso.BuildPath(selfDir, "launcher.ps1")
 
 If Not fso.FileExists(launcher) Then
-  LogFail "launcher.ps1 not found at " & launcher
+  LogFail "launcher.ps1 not found at " & AsciiOnly(launcher)
   WScript.Quit 1
 End If
 
@@ -69,6 +69,24 @@ End If
 ' reason this can be called is that fso may be Nothing, and a logger that
 ' needs a working fso to report a broken fso reports nothing at all.
 ' The path comes from WScript.Shell's environment expansion instead.
+' Replace anything outside printable ASCII with '?' before logging.
+' The launcher log is shared with launcher.ps1, which writes UTF-8; this script
+' can only append ANSI, so a non-ASCII path would land as mojibake in a UTF-8
+' file. Degrading one character beats emitting a broken line.
+Function AsciiOnly(s)
+  Dim i, ch, out
+  out = ""
+  For i = 1 To Len(s)
+    ch = AscW(Mid(s, i, 1))
+    If ch >= 32 And ch <= 126 Then
+      out = out & Chr(ch)
+    Else
+      out = out & "?"
+    End If
+  Next
+  AsciiOnly = out
+End Function
+
 Sub LogFail(msg)
   Dim dir, fh, ts, t
   On Error Resume Next
@@ -76,6 +94,12 @@ Sub LogFail(msg)
   ' already needed fso, and a logger that reaches for CreateObject again just
   ' moves the same failure one level down. When fso is unusable there is no
   ' log line - a documented limitation rather than a silent success.
+  '
+  ' ENCODING: OpenTextFile appends in the system ANSI code page, while
+  ' launcher.ps1 writes the same file with -Encoding UTF8. Pure-ASCII messages
+  ' are byte-identical either way, which is why every message here stays ASCII.
+  ' A non-ASCII path would land as ANSI in a UTF-8 file and read as mojibake.
+  ' Reported as Hex in that case rather than passed through.
   If fso Is Nothing Then Exit Sub
   dir = fso.BuildPath(fso.GetSpecialFolder(2), "dsh-notify")
   If Not fso.FolderExists(dir) Then fso.CreateFolder dir

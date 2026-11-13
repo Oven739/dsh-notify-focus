@@ -32,7 +32,7 @@
 > ### 测试
 >
 > ```powershell
-> npm test                                    # 44 个，7 个文件
+> npm test                                    # 49 个，8 个文件
 > node --test test/forward-vbs-portability.test.mjs   # 可移植性
 > node --test test/protocol-registration.test.mjs     # 协议注册
 > ```
