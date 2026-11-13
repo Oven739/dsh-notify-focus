@@ -24,8 +24,21 @@
 >
 > 跳转原理：DSH 前端不读 `?session=`，所以由插件自己的浏览器半边轮询宿主队列，调 `ctx.uiWorkspace.openSession()`。详见 [CONTEXT.md](CONTEXT.md)。
 >
-> 测试：`node test/focus-gate.test.mjs`、`node test/decision-registry.test.mjs`、`node test/toast-dedupe.test.mjs`
-> （`node --test <dir>` 在受限沙箱下会因 spawn EPERM 失败，直接跑单文件即可。）
+> ### 出问题先看这里
+>
+> **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** — 症状 → 日志 → 代码 的排查入口。
+> 这个插件最难的故障都是**静默的**（点了没反应、两个日志都不留痕），那一页写了怎么定位。
+>
+> ### 测试
+>
+> ```powershell
+> npm test                                    # 44 个，7 个文件
+> node --test test/forward-vbs-portability.test.mjs   # 可移植性
+> node --test test/protocol-registration.test.mjs     # 协议注册
+> ```
+>
+> `node --test <dir>` 在受限沙箱下会因 spawn EPERM 失败，直接跑单文件即可。
+> 另：`test/channel.e2e.mjs` 后缀不是 `.test.mjs`，**不在 `npm test` 的 glob 里**，从未被执行。
 
 ---
 

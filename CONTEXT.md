@@ -167,8 +167,11 @@ ctx.webServer.register({
 **解法**：协议处理器改指 `wscript.exe`。
 
 ```
-"wscript.exe" //B //Nologo "G:\DSH\dsh-notify-focus\lib\forward.vbs" "%1"
+"C:\Windows\System32\wscript.exe" //B //Nologo "<安装目录>\lib\forward.vbs" "%1"
 ```
+
+- **wscript 用绝对路径**：裸 `wscript.exe` 靠 PATH 解析，多一个失败点
+- **vbs 路径由 `register-protocol.ps1` 在运行时按 `$PSScriptRoot` 生成**，不是写死的
 
 - `wscript.exe` 是 `WINDOWS_GUI` 子系统，**自身没有控制台**
 - `forward.vbs` 用 `sh.Run(cmd, 0, False)` 启动 launcher，`0` = `SW_HIDE`，通过 `CreateProcess` 的 `STARTF_USESHOWWINDOW` 生效
@@ -188,15 +191,36 @@ Set-Item -Path $cmdKey -Value $command -Force    # 无条件覆盖
 
 这是「自愈」逻辑，但它**会把任何手动修改静默改回 powershell**。第一次改注册表后仍然闪窗，就是因为下一次发通知又改回去了。
 
-本 fork 已改为注册 wscript 版本，并在 `forward.vbs` 缺失时回退 powershell。
+本 fork 已把注册抽成 `lib/register-protocol.ps1`，**三个调用点**都用它：
 
-### VBScript 必须用 CRLF
+| 调用点 | 何时 |
+|---|---|
+| `notify.ps1` | 带 URL 且非前台抑制的普通通知 |
+| `notify-actions.ps1` | 审批按钮通知（**它原本零注册表写入，这是新机器上最常撞的坑**） |
+| `index.js` 的 `apply()` | 启动预热，确保第一条通知之前键就已存在 |
 
-用 LF 换行时 WSH 报 `800A0401 语句未结束`，脚本根本不执行。写完后必须验证字节：
+前两条都可能被跳过（前台抑制、`openOnClick:false` 等），所以启动预热是必要的补充。
+
+### VBScript 的编码：BOM 致命，换行不是
+
+**实测修正**（2026-11-12，三份独立审核之一）：LF 换行**不会**导致 `800A0401`——WSH 把 CR/LF/CRLF 都当行终止符。CRLF 是仓库约定（`.gitattributes` 强制），不是语法要求。
+
+**真正致命的是 UTF-8 BOM**：
+
+```
+UTF-8 无 BOM  → 正常（按 ANSI 解码，纯 ASCII 内容无影响）
+UTF-8 带 BOM  → exit 1，第 1 行 800A0401（BOM 三个字节被当成可见字符）
+UTF-16LE+BOM  → 正常
+```
+
+`//B` 会吞掉错误对话框，所以 BOM 问题的表现是「点击彻底无反应」。
+
+**验证**：
 
 ```powershell
 $b = [System.IO.File]::ReadAllBytes($p)
-[regex]::Matches([Text.Encoding]::ASCII.GetString($b), "`r`n").Count   # 应为行数
+($b[0..2] | ForEach-Object { $_.ToString('x2') }) -join ' '   # 不能是 "ef bb bf"
+($b | Where-Object { $_ -gt 127 }).Count                       # 应为 0（纯 ASCII）
 ```
 
 ### 窗口类名用前缀匹配
