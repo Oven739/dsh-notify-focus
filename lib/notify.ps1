@@ -69,39 +69,18 @@ $launchValue = ""
 if ($Url -ne "") {
   try {
     if ($LaunchProtocol -eq 1) {
-      # Register the dshnotify:// protocol handler idempotently (best effort).
+      # Register the dshnotify:// protocol handler via the shared script.
+      #
+      # The implementation used to live here, which is why approval toasts -
+      # sent by notify-actions.ps1, which had no copy of it - never wrote the
+      # key. Both senders now call lib/register-protocol.ps1.
       try {
-        $progId = "HKCU:\Software\Classes\dshnotify"
-        if (-not (Test-Path $progId)) {
-          New-Item -Path $progId -Force | Out-Null
-        }
-        # Default (unnamed) value names the protocol.
-        Set-Item -Path $progId -Value 'dshnotify' -Force
-        # "URL Protocol" marker value (presence marks the key as a protocol handler).
-        Set-ItemProperty -Path $progId -Name 'URL Protocol' -Value '' -Force
-        $cmdKey = "HKCU:\Software\Classes\dshnotify\shell\open\command"
-        if (-not (Test-Path $cmdKey)) {
-          New-Item -Path $cmdKey -Force | Out-Null
-        }
-        # Register through wscript.exe, not powershell.exe directly.
-        #
-        # powershell.exe is a WINDOWS_CUI image: the OS creates its console
-        # before the script runs, so -WindowStyle Hidden can only shrink the
-        # flash to ~250ms, never remove it. wscript.exe is WINDOWS_GUI and owns
-        # no console; forward.vbs passes SW_HIDE into CreateProcess so the child
-        # console is hidden from the moment it exists.
-        #
-        # This block used to rewrite the value unconditionally on every toast,
-        # which silently reverted any manual change back to the flashing form.
-        $vbsPath = Join-Path $PSScriptRoot "forward.vbs"
-        if (Test-Path $vbsPath) {
-          $command = ('"wscript.exe" //B //Nologo "' + $vbsPath + '" "%1"')
+        $registerScript = Join-Path $PSScriptRoot "register-protocol.ps1"
+        if (Test-Path $registerScript) {
+          & $registerScript | Out-Null
         } else {
-          # No forwarder shipped: fall back to the original command.
-          $launcherPath = Join-Path $PSScriptRoot "launcher.ps1"
-          $command = ('"powershell.exe" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $launcherPath + '" "%1"')
+          Write-Warning "register-protocol.ps1 missing; protocol handler not refreshed"
         }
-        Set-Item -Path $cmdKey -Value $command -Force
       } catch {
         Write-Warning ("dshnotify protocol registration failed, falling back to direct URL: " + $_.Exception.Message)
         # Fall back to direct-URL activation for this toast.
@@ -131,7 +110,7 @@ if ($clickable) {
     $root = $xml.DocumentElement
     # XmlElement.Name is EMPTY under the PowerShell 5.1 WinRT projection (the
     # tag name lives on TagName), so guarding on -eq "toast" silently skipped
-    # every attribute and the toast shipped with no launch target — a click then
+    # every attribute and the toast shipped with no launch target - a click then
     # did nothing at all. Compare TagName instead, and fall back to setting the
     # attributes unconditionally: worst case the document is not a toast and
     # SetAttribute throws into the catch below.

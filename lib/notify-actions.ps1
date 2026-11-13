@@ -87,6 +87,22 @@ $esc = {
 $launch = ""
 if ($Url -ne "") {
   if ($LaunchProtocol -eq 1) {
+    # Register the protocol handler before the toast carries a protocol launch.
+    #
+    # This file sends approval toasts, and on a machine that has never seen a
+    # plain notification those are the first ones to arrive - because buttons
+    # are enabled by default. Without this call the registry key was never
+    # written, so clicking Allow did nothing at all and left no trace.
+    try {
+      $registerScript = Join-Path $PSScriptRoot "register-protocol.ps1"
+      if (Test-Path $registerScript) {
+        & $registerScript | Out-Null
+      } else {
+        Write-Warning "register-protocol.ps1 missing; approval clicks may not resolve"
+      }
+    } catch {
+      Write-Warning ("protocol registration failed: " + $_.Exception.Message)
+    }
     $launch = "dshnotify://open?u=" + [uri]::EscapeDataString($Url)
   } else {
     $launch = $Url
