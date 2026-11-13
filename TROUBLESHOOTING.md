@@ -15,16 +15,43 @@
 | 点击后**窗口来了但会话没切换** | `notify.log` 搜 `jump-*` | `lib\\index.js`、`lib\\client.js` |
 | 插件**没加载**（无通知、无日志） | DSH 宿主日志 | `package.json`、profile 的 `cordis.patch.yml` |
 
-### 日志位置（两条不同的 TEMP）
+### 日志位置：有**两个** launcher.log，别只看一个
+
+同一个 `launcher.ps1`，因为运行时 `$env:TEMP` 不同，会写到两个地方：
 
 ```
-%LOCALAPPDATA%\\DSH\\temp\\dsh-notify\\notify.log      通知发送侧（插件写）
-%LOCALAPPDATA%\\DSH\\temp\\dsh-notify\\launcher.log    点击处理侧（launcher.ps1 写）
-%TEMP%\\dsh-notify\\launcher.log                       协议处理器视角的 TEMP（可能不同！）
+C:\Users\<user>\AppData\Local\Temp\dsh-notify\launcher.log
+    ^ 你点击 Windows 通知时，协议处理器进程写的
+    ^ 真实点击痕迹在这里
+    ^ 特征：URL 带斜杠，如 dshnotify://open/?u=...
+
+C:\Users\<user>\AppData\Local\DSH\temp\dsh-notify\launcher.log
+    ^ 从 DSH 沙箱里手动调 launcher.ps1 时写的
+    ^ 只有测试痕迹
+    ^ 特征：URL 无斜杠，如 dshnotify://open?u=...
 ```
 
-> **两个 TEMP 是已知陷阱**：宿主与协议处理器看到的 `%TEMP%` 可能不同。
-> 搜不到日志时用 `Get-ChildItem $env:LOCALAPPDATA -Filter launcher.log -Recurse`。
+为什么：`launcher.ps1:117` 用 `$env:TEMP` 定位日志目录。协议处理器由系统 ShellExecute
+启动，继承普通用户 TEMP；DSH 宿主把 TEMP 重定向到了自己的私有目录。两者永远不同。
+
+> **排查陷阱**：查「点击为什么没反应」时如果只看第二个，会以为「点击没有任何记录」，
+> 实际记录在第一个里。2026-11-13 的实测就因此误判了一轮。
+
+一网打尽：
+
+```powershell
+Get-ChildItem $env:LOCALAPPDATA -Filter launcher.log -Recurse -ErrorAction SilentlyContinue |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object LastWriteTime, Length, FullName
+```
+
+### notify.log 只有一个
+
+```
+%LOCALAPPDATA%\DSH\temp\dsh-notify\notify.log    通知发送侧（插件 index.js 写）
+```
+
+它由宿主进程写，宿主只有一个 TEMP 视角，所以不会分裂。
 
 ---
 
