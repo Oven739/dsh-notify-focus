@@ -1,8 +1,8 @@
-# Force CRLF for the VBS forwarder on checkout.
-# This file is NOT merely style-sensitive: Windows Script Host rejects LF-only
-# with 800A0401 and never runs it, which silently breaks every toast click.
-# `text eol=crlf` normalises to LF in the index and restores CRLF on checkout,
-# so the working tree always gets the form wscript needs.
+# Keep CRLF for the VBS forwarder on checkout — a repository convention, not a
+# requirement. WSH treats CR, LF and CRLF alike as line terminators: an LF-only
+# forwarder runs correctly under both cscript and wscript (measured 2026-11-14).
+# The encoding that does break it is a UTF-8 BOM (800A0408); see CONTEXT.md.
+# `text eol=crlf` normalises to LF in the index and restores CRLF on checkout.
 *.vbs text eol=crlf
 
 # PowerShell reads either ending fine, but keep the authored bytes as-is.
