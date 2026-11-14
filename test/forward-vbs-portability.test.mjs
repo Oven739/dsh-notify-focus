@@ -190,7 +190,7 @@ test("FORWARDER: pure ASCII, no BOM (WSH decodes ANSI, a UTF-8 BOM is a syntax e
   assert.ok(raw.length > 100, "forward.vbs is truncated");
 
   const head = [...raw.subarray(0, 3)].map((b) => b.toString(16).padStart(2, "0")).join(" ");
-  assert.notEqual(head, "ef bb bf", "UTF-8 BOM: WSH decodes ANSI -> 800A0401 on line 1, and //B hides it");
+  assert.notEqual(head, "ef bb bf", "UTF-8 BOM: WSH decodes ANSI -> 800A0408 invalid character on line 1, and //B hides it");
   assert.notEqual(head.slice(0, 5), "ff fe", "UTF-16LE BOM: not the shipped form");
   assert.notEqual(head.slice(0, 5), "fe ff", "UTF-16BE BOM: not the shipped form");
 
@@ -203,7 +203,7 @@ test("FORWARDER: pure ASCII, no BOM (WSH decodes ANSI, a UTF-8 BOM is a syntax e
   assert.equal(Buffer.from(text, "latin1").equals(raw), true, "latin1 round-trip must be lossless");
 });
 
-// --- 7. encoding: CRLF only ----------------------------------------------
+// --- 7. line endings: CRLF by repository convention ---------------------
 
 test("FORWARDER: CRLF only (the shape .gitattributes promises for *.vbs)", () => {
   let bareLf = 0;
@@ -212,7 +212,10 @@ test("FORWARDER: CRLF only (the shape .gitattributes promises for *.vbs)", () =>
     if (raw[i] === 0x0a && raw[i - 1] !== 0x0d) bareLf += 1;
     if (raw[i] === 0x0d && raw[i + 1] !== 0x0a) bareCr += 1;
   }
-  assert.equal(bareLf, 0, "bare LF found: an editor or a git filter normalised the file to LF");
+  // WSH accepts CR, LF and CRLF alike (measured 2026-11-14), so this pins the
+  // repository convention rather than a runtime requirement. A bare LF here
+  // means an editor or a git filter rewrote the file, not that wscript breaks.
+  assert.equal(bareLf, 0, "bare LF found: an editor or a git filter rewrote the file");
   assert.equal(bareCr, 0, "bare CR found: a partial conversion (mixed line endings)");
 
   const crlf = text.split("\r\n").length - 1;
