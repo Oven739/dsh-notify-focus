@@ -283,21 +283,30 @@ function Invoke-Win32Focus {
     if (-not ("Win32WindowFinder" -as [type])) {
       Add-Type -TypeDefinition $win32Source -Language CSharp
     }
-    # Electron apps share Chrome's window class, so the DSH desktop host is a
-    # legitimate target. Enumerating chrome.exe alone meant every click opened a
-    # brand-new browser tab instead of focusing the already-open app.
+    # Candidate processes: ONLY DSH host processes.
     #
-    # Processes are matched by IMAGE NAME through the finder itself rather than
-    # by a Get-Process lookup: querying another user's process by name can stall
-    # under a restricted token, which made this whole script hang.
-    # Candidate processes: browsers, plus every DSH host process. The desktop
-    # app is Electron, so its windows use Chrome's window class but its process
-    # is "DeepSeek Harness" — a chrome-only list never matched it.
-    $candPids = New-Object System.Collections.Generic.HashSet[int]
-    foreach ($p in (Get-Process chrome -ErrorAction SilentlyContinue)) { [void]$candPids.Add($p.Id) }
-    foreach ($p in (Get-Process msedge -ErrorAction SilentlyContinue)) { [void]$candPids.Add($p.Id) }
+    # This list used to include chrome.exe and msedge.exe, on the reasoning that
+    # the DSH desktop app is Electron and therefore shares Chrome's window class.
+    # Sharing the class is true; making browsers *candidates* was the mistake.
+    #
+    # FindByPid ranks visible windows before hidden ones, and the selection below
+    # can only tell them apart by title — but a DSH window's title is the PAGE
+    # title ("根据这条用户消息… — Claude"), never the app name. So the preference
+    # loop never matched, `$best` fell through to `$wins[0]`, and that was
+    # whichever visible Chrome-family window came first. With Edge or Chrome open
+    # in the background, a toast click therefore brought THAT window forward and
+    # left DSH hidden, while still logging "focused existing DSH window".
+    #
+    # Measured 2026-11-15 (same window state, same toast URL):
+    #   browser pids included -> foreground became msedge, DSH stayed vis=False
+    #   DSH pids only         -> foreground became DSH,    DSH became  vis=True
+    #
+    # A browser window is never a correct target for a DSH toast, so it must not
+    # be a candidate at all. Do not add chrome.exe/msedge.exe back.
+    #
     # Get-Process -Name with a spaced name can stall under a restricted token;
     # enumerating all processes and filtering is reliable and fast enough here.
+    $candPids = New-Object System.Collections.Generic.HashSet[int]
     try {
       foreach ($p in (Get-Process -ErrorAction SilentlyContinue)) {
         if ($p.ProcessName -eq "DeepSeek Harness") { [void]$candPids.Add($p.Id) }
@@ -314,7 +323,17 @@ function Invoke-Win32Focus {
       Write-Trace ("[win32] no candidate window (pids=" + $candPids.Count + ")")
       return $false
     }
-    # Prefer a window whose title mentions the app, else the first one.
+    # Pick the window to raise.
+    #
+    # Every candidate here is already owned by a DSH process, so any of them is a
+    # correct target — the title only decides WHICH DSH window (main window vs. a
+    # child/dialog), and the title cue will not match for the reason above. What
+    # must not happen is preferring an unrecognised window over a better-known
+    # one, so a titled visible window wins over a hidden or untitled one.
+    #
+    # The old code was `if ($best -eq $null) { $best = $wins[0] }`, which is only
+    # safe now that browsers are excluded; it is spelled out here so that
+    # re-adding a browser pid cannot silently reintroduce the wrong window.
     $best = $null
     foreach ($w in $wins) {
       $title = [Win32WindowFinder]::GetTitle($w)
@@ -323,7 +342,18 @@ function Invoke-Win32Focus {
       }
       if ($best -ne $null) { break }
     }
-    if ($best -eq $null) { $best = $wins[0] }
+    if ($best -eq $null) {
+      # Fall back to the first candidate that is a real, titled window; FindByPid
+      # already ranked visible before hidden, so $wins[0] is the app's main
+      # window whenever one is titled.
+      foreach ($w in $wins) {
+        if ([Win32WindowFinder]::GetTitle($w).Length -gt 0) { $best = $w; break }
+      }
+    }
+    if ($best -eq $null) {
+      Write-Trace ("[win32] no titled DSH window among " + $wins.Count + " candidate(s)")
+      return $false
+    }
 
     # Restore/show ONLY when the window is actually hidden or minimised.
     #
@@ -465,7 +495,14 @@ function Main {
   # This goes through the plugin's authenticated loopback port, not the page's
   # same-origin fetch routes: those require the browser's auth cookie, and an
   # external process POSTing to them gets 401.
-  if ($handled -and $targetUrl -match "[?&]session=([^&]+)") {
+  #
+  # NOT gated on $handled. It used to be `if ($handled -and ...)`, which tied the
+  # session jump to focus success: when the finder raised some other window it
+  # still set $handled = $true, so a jump was offered to a page the user could
+  # not see, and when focus genuinely failed no jump was offered at all. The jump
+  # is an independent delivery of the session id and costs one loopback POST, so
+  # it runs whenever an id is present.
+  if ($targetUrl -match "[?&]session=([^&]+)") {
     $sessionId = [uri]::UnescapeDataString($Matches[1])
     $endpoint = Read-DecisionEndpoint
     if ($sessionId -ne "" -and $endpoint -ne $null) {
