@@ -5,6 +5,12 @@
 #
 # Windows PowerShell 5.1 (WinRT projection). ASCII-only, no BOM: parameters are
 # bound from the process argument vector.
+#
+# The param block IS the command-line interface index.js invokes; the shared
+# subset (Title/Body/Aumid/AppName/Url/LaunchProtocol/ForegroundPid/
+# ForegroundName) must stay in the same order and with the same defaults as
+# notify.ps1's block -- they are one logical interface split across two entry
+# points because PS 5.1 has no cross-file parameter objects.
 param(
   [Parameter(Mandatory = $true)][string]$Title,
   [Parameter(Mandatory = $true)][string]$Body,
@@ -23,34 +29,32 @@ param(
 $ErrorActionPreference = "Stop"
 
 # ---------------------------------------------------------------------------
-# Foreground suppression: when the DSH host owns the foreground window the user
-# is already looking at the approval/question panel, so a toast would cover it.
+# Foreground suppression, via the SHARED probe (lib/foreground-probe.ps1).
+#
+# When the DSH host owns the foreground window the user is already looking at
+# the approval/question panel, so a toast would cover it. The probe prints
+# "skipped foreground" when the pid/name owns the foreground window and
+# "show toast" otherwise; any failure prints "show toast", because an unknown
+# state must never suppress.
+#
+# This block used to be pasted inline here AND in notify.ps1 (audit 2026-11-17,
+# Standards-1): three copies of one probe, every fix applied three times. It is
+# one implementation now.
 # ---------------------------------------------------------------------------
 if ($ForegroundPid -gt 0 -or $ForegroundName.Count -gt 0) {
-  try {
-    if (-not ("W.U" -as [type])) {
-      Add-Type -Namespace W -Name U -MemberDefinition @'
-[DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow();
-[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hWnd, out uint pid);
-'@
-    }
-    $fgHandle = [W.U]::GetForegroundWindow()
-    $fgPid = 0
-    if ($fgHandle -ne [System.IntPtr]::Zero) {
-      [void][W.U]::GetWindowThreadProcessId($fgHandle, [ref]$fgPid)
-    }
-    $skip = $false
-    if ($ForegroundPid -gt 0 -and $fgPid -eq $ForegroundPid) { $skip = $true }
-    if (-not $skip -and $ForegroundName.Count -gt 0 -and $fgPid -gt 0) {
-      $fgProc = Get-Process -Id $fgPid -ErrorAction SilentlyContinue
-      if ($fgProc -and ($ForegroundName -contains $fgProc.ProcessName)) { $skip = $true }
-    }
-    if ($skip) {
+  $probeScript = Join-Path $PSScriptRoot "foreground-probe.ps1"
+  if (Test-Path $probeScript) {
+    $probeArgs = @("-File", $probeScript, "-HostPid", $ForegroundPid)
+    foreach ($n in $ForegroundName) { $probeArgs += @("-Name", $n) }
+    $verdict = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass @probeArgs 2>$null
+    if ("$verdict" -match "skipped foreground") {
       Write-Output "skipped foreground"
       exit 0
     }
-  } catch {
-    Write-Warning ("foreground probe failed, showing toast: " + $_.Exception.Message)
+  } else {
+    # Probe script missing: fail open and show the toast (never suppress on a
+    # broken install -- a duplicated toast beats a swallowed one).
+    Write-Warning "foreground-probe.ps1 missing; suppression check skipped"
   }
 }
 
