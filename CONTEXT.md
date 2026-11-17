@@ -29,9 +29,15 @@ ApprovalService.request
       -> [api-remotes]    <- 转成 Remote Event，浏览器才看到审批卡
 ```
 
-**推论**：只有当用户**不在电脑前**（宿主不在前台）时才 park。宿主在前台时必须直接 `next()`，让浏览器照常弹卡。否则用户会既看不到审批卡，又只有一个未必注意到的 toast——比原来更糟。
+**推论（会话级，2026-11-12 由 dab50af 改写）**：只有当用户**看不到这条请求**时才 park。「看不到」按会话判定，不再按应用判定：
 
-这条约束由 `skipWhenHostFocused` 与监听器共同实现，两者不能各自为政。
+- 宿主**不在前台** → 用户不在电脑前 → park
+- 宿主在前台、且**屏幕上就是这个会话**（`isOnScreen`）→ 直接 `next()`，浏览器照常弹卡
+- 宿主在前台、但屏幕上是**另一个会话** → park（toast 带「允许/拒绝」按钮）
+
+旧版只有第一种判定：在 A 会话上读资料时，B 会话的审批被应用级抑制静默吞掉——比弹 toast 更糟。这正是 `active-session` 上报与 `isOnScreen()` 存在的理由（日志事件 `waterfall-parked-despite-focus`）。
+
+这条约束由 `skipWhenHostFocused` 与监听器共同实现（`index.js` 的 approval waterfall 分支），两者不能各自为政。
 
 ### 2. 只有 `approval/request` 和 `user-questions/request` 是 waterfall
 

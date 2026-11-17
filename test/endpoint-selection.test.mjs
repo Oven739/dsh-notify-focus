@@ -11,16 +11,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-/** Mirrors the ranking in Read-DecisionEndpoint. */
+/** Mirrors the ranking in Read-DecisionEndpoint.
+ *
+ * The implementation skips every candidate whose port is not LIVE
+ * (`if (-not $alive) { continue }`) and returns $null when none are: posting a
+ * decision to a dead port can only fail late, which reads on screen as "the
+ * click did nothing", so no candidate beats no candidate. This mirror must
+ * follow that rule exactly -- the 2026-11-17 audit caught the two drifting
+ * apart (the mirror used to keep a dead endpoint as best-available).
+ */
 const pickEndpoint = (candidates) => {
   let best = null;
   for (const c of candidates) {
     if (!c.port || !c.secret) continue;
+    if (!c.alive) continue; // dead ports are skipped, never ranked
     if (best === null) { best = c; continue; }
-    if (c.alive !== best.alive) {
-      if (c.alive) best = c;
-      continue;
-    }
     // Same liveness: newer file wins.
     if (c.mtime > best.mtime) best = c;
   }
@@ -35,9 +40,12 @@ test("REGRESSION: a stale dead endpoint must not win over a live one", () => {
   assert.equal(chosen.port, 13000, "liveness must outrank list order and recency");
 });
 
-test("with only a dead endpoint, nothing live is invented", () => {
+test("with only a dead endpoint, nothing is returned at all", () => {
+  // The implementation skips dead candidates outright, so a dead-only list
+  // yields $null and the caller falls back to opening the GUI immediately --
+  // it must NOT return a port nothing listens on.
   const chosen = pickEndpoint([{ port: 8801, secret: "s", alive: false, mtime: 100 }]);
-  assert.equal(chosen.port, 8801, "still returns the best available; caller reports unreachable");
+  assert.equal(chosen, null, "a dead endpoint is never returned, not even as best-available");
 });
 
 test("among live endpoints the newer file wins", () => {
@@ -58,4 +66,6 @@ test("incomplete files are ignored", () => {
 test("no usable candidate returns null", () => {
   assert.equal(pickEndpoint([]), null);
   assert.equal(pickEndpoint([{ port: 0, secret: "", alive: false, mtime: 1 }]), null);
+  // dead-only, all fields present: still null
+  assert.equal(pickEndpoint([{ port: 8801, secret: "s", alive: false, mtime: 1 }]), null);
 });
