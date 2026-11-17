@@ -24,10 +24,15 @@
 >
 > 跳转原理：DSH 前端不读 `?session=`，所以由插件自己的浏览器半边轮询宿主队列，调 `ctx.uiWorkspace.openSession()`。详见 [CONTEXT.md](CONTEXT.md)。
 >
-> ### 出问题先看这里
+> ### 文档
 >
-> **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** — 症状 → 日志 → 代码 的排查入口。
-> 这个插件最难的故障都是**静默的**（点了没反应、两个日志都不留痕），那一页写了怎么定位。
+> | 文件 | 什么时候看 |
+> |---|---|
+> | **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** | 出问题时：症状 → 日志 → 代码的排查入口 |
+> | **[CONTEXT.md](CONTEXT.md)** | 改代码前：硬性约束与踩过的坑 |
+> | **[HANDOFF.md](HANDOFF.md)** | 接手时：可移植性改造与两次审计的完整记录（为什么改、怎么验证、什么没解决）|
+>
+> 这个插件最难的故障都是**静默的**（点了没反应、两个日志都不留痕），TROUBLESHOOTING 写了怎么定位。
 >
 > ### 测试
 >
