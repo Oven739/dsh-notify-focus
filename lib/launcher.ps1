@@ -168,7 +168,7 @@ function Invoke-CdpNavigate {
   return $false
 }
 
-# Win32 P/Invoke type compiled once for Step B.
+# Win32 P/Invoke type compiled once for the focus step (Step 1).
 $win32Source = @'
 using System;
 using System.Collections.Generic;
@@ -185,53 +185,6 @@ public class Win32WindowFinder {
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
-
-  public static List<IntPtr> Find(string className, HashSet<int> pids, string titleCue, string[] matchTitles) {
-    var result = new List<IntPtr>();
-    EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
-      try {
-        if (!IsWindowVisible(hWnd)) return true;
-        var cls = new StringBuilder(256);
-        GetClassName(hWnd, cls, cls.Capacity);
-        if (cls.ToString() != className) return true;
-        int pid;
-        GetWindowThreadProcessId(hWnd, out pid);
-        if (!pids.Contains(pid)) return true;
-        var title = new StringBuilder(512);
-        GetWindowText(hWnd, title, title.Capacity);
-        var t = title.ToString();
-        bool titleOk = false;
-        foreach (var mt in matchTitles) { if (t.Contains(mt)) { titleOk = true; break; } }
-        if (titleOk || t.Contains(titleCue)) result.Add(hWnd);
-      } catch {}
-      return true;
-    }, IntPtr.Zero);
-    return result;
-  }
-
-  // Match on the window TITLE only. The DSH desktop app runs as
-  // "DeepSeek Harness", which a chrome-only pid set would never include, but its
-  // window title carries the app name and the host:port cue.
-  public static List<IntPtr> FindByTitle(string className, HashSet<int> pids, string titleCue, string[] matchTitles) {
-    var result = new List<IntPtr>();
-    EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
-      try {
-        if (!IsWindowVisible(hWnd)) return true;
-        var cls = new StringBuilder(256);
-        GetClassName(hWnd, cls, cls.Capacity);
-        if (cls.ToString() != className) return true;
-        var title = new StringBuilder(512);
-        GetWindowText(hWnd, title, title.Capacity);
-        var t = title.ToString();
-        if (t.Length == 0) return true;
-        bool titleOk = false;
-        foreach (var mt in matchTitles) { if (t.Contains(mt)) { titleOk = true; break; } }
-        if (titleOk || t.Contains(titleCue)) result.Add(hWnd);
-      } catch {}
-      return true;
-    }, IntPtr.Zero);
-    return result;
-  }
 
   // Focus candidates by owning process id. This is what actually identifies a
   // DSH window: title text is the page title, so it carries no port cue.
@@ -428,6 +381,10 @@ function Main {
       if ($key -eq "t") { $token = $decoded }
       elseif ($key -eq "v") { $verdict = $decoded }
     }
+    # The verdict literals are the wire protocol shared with the host side:
+    # lib/decision-registry.mjs owns them (VERDICTS) and decision-channel.mjs
+    # validates against the same two strings. A separate process cannot import
+    # that constant, so this check is anchored by test/toast-marker-contract.
     if ($token -ne "" -and ($verdict -eq "allow" -or $verdict -eq "reject")) {
       if (Send-Decision -Token $token -Verdict $verdict) {
         Write-Trace "[ok] decision applied, no window action needed"
@@ -465,7 +422,14 @@ function Main {
 
   $handled = $false
 
-  # Step A: focus first, navigate second.
+  # Step 1: focus the window. Step 2 (below) offers the session jump. Step 3:
+  # CDP navigate (opt-in). Step 4: open in the default browser as the fallback.
+  #
+  # Steps are named by EXECUTION ORDER so the log reads in sequence. The old
+  # labels were historical ("Step B" for focus, "Step A" for the opt-in CDP
+  # path that usually never runs) and pointed the wrong way when reading a
+  # launcher.log: the first line of a click said "Step B" with nothing before
+  # it (audit 2026-11-17, Standards-4).
   #
   # Order matters for latency: the user clicks a toast to get back to DSH, and
   # focusing an existing window achieves that immediately. CDP navigation is an
@@ -476,14 +440,14 @@ function Main {
   $focusedAlready = $false
   try {
     if (Invoke-Win32Focus -HostPort $HostPort -MatchTitles $MatchTitles) {
-      Write-Trace ("[ok] Step B focused existing DSH window (focus-only)")
+      Write-Trace ("[ok] Step 1 focused existing DSH window (focus-only)")
       $handled = $true
       $focusedAlready = $true
     } else {
-      Write-Trace ("[step] Step B no candidate")
+      Write-Trace ("[step] Step 1 no candidate")
     }
   } catch {
-    Write-Trace ("[fail step] Step B: " + $_.Exception.Message)
+    Write-Trace ("[fail step] Step 1: " + $_.Exception.Message)
   }
 
   # Tell the page which conversation to reveal.
@@ -523,7 +487,7 @@ function Main {
     }
   }
 
-  # Step A: CDP navigate — opt-in only.
+  # Step 3: CDP navigate — opt-in only.
   #
   # Probing three debug ports costs ~1 s each (~3.1 s total) and can never
   # succeed for the packaged desktop app, which exposes no debugger. It stays
@@ -532,24 +496,25 @@ function Main {
   if ($HostPort -ne "" -and $env:DSH_NOTIFY_CDP -eq "1") {
     try {
       if (Invoke-CdpNavigate -TargetUrl $targetUrl -HostPort $HostPort) {
-        Write-Trace ("[ok] Step A CDP navigate succeeded for " + $HostPort)
+        Write-Trace ("[ok] Step 3 CDP navigate succeeded for " + $HostPort)
         $handled = $true
       } else {
-        Write-Trace ("[step] Step A skipped/failed")
+        Write-Trace ("[step] Step 3 skipped/failed")
       }
     } catch {
-      Write-Trace ("[fail step] Step A: " + $_.Exception.Message)
+      Write-Trace ("[fail step] Step 3: " + $_.Exception.Message)
     }
   }
 
-  # Step C: fallback open in default browser. Always runs if A and B failed.
+  # Step 4: fallback open in the default browser. Runs when nothing else
+  # handled the click (no window found, CDP off or failed).
   if (-not $handled) {
     try {
       Write-Trace ("[fallback] Start-Process " + $targetUrl)
       Start-Process $targetUrl
       $handled = $true
     } catch {
-      Write-Trace ("[fail step] Step C: " + $_.Exception.Message)
+      Write-Trace ("[fail step] Step 4: " + $_.Exception.Message)
     }
   }
 
