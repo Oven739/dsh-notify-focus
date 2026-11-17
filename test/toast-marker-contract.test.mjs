@@ -65,6 +65,52 @@ test("the shared probe prints the suppression marker, not a new one", () => {
   );
 });
 
+// --- the SECOND consumer of the probe -------------------------------------
+//
+// REGRESSION THIS GUARDS (2026-11-18)
+// When the probe was consolidated it was rewritten to speak only the toast
+// senders' vocabulary ("skipped foreground" / "show toast"). index.js's focus
+// gate was the other consumer and still parsed "fg"/"bg", so every sample read
+// "bg": the gate believed the user was never at the computer, parked every
+// approval, and the browser card never appeared -- even with the window in
+// front of the user. The tests below pin BOTH vocabularies on one line, which
+// is what makes a one-sided rewrite go red here instead of in production.
+const FG = "fg";
+const BG = "bg";
+
+test("the probe emits the fg marker the focus gate parses", () => {
+  assert.ok(
+    INDEX.includes("fg"),
+    "index.js focus gate must parse the 'fg' marker",
+  );
+  assert.ok(
+    new RegExp(`"${FG}\\b`).test(PROBE) || PROBE.includes(`'${FG}`) || PROBE.includes(`"${FG}`),
+    "foreground-probe.ps1 must emit the 'fg' marker for the focus gate",
+  );
+});
+
+test("REGRESSION: one probe line satisfies BOTH consumers", () => {
+  // The winning lines must contain the focus-gate token AND the toast token,
+  // so neither consumer can be broken by serving only the other one.
+  const lines = (PROBE.match(/\$LINE_[A-Z]+ = '([^']+)'/g) ?? []).map((m) =>
+    m.replace(/^\$LINE_[A-Z]+ = '/, "").replace(/'$/, ""),
+  );
+  assert.equal(lines.length, 2, "probe must define both verdict lines");
+
+  const foreground = lines.find((l) => l.startsWith(FG));
+  const background = lines.find((l) => l.startsWith(BG));
+  assert.ok(foreground, `a line must start with "${FG}"`);
+  assert.ok(background, `a line must start with "${BG}"`);
+
+  // focus gate: /(^|\s)fg(\s|$)/ -- "fg" must be a whole word
+  assert.match(foreground, /(^|\s)fg(\s|$)/, "foreground line must satisfy the focus-gate regex");
+  // toast senders: /skipped foreground/
+  assert.match(foreground, /skipped foreground/, "foreground line must carry the toast marker");
+  // and the background line must NOT look focused to either side
+  assert.doesNotMatch(background, /(^|\s)fg(\s|$)/, "background line must not match fg");
+  assert.doesNotMatch(background, /skipped foreground/, "background line must not suppress toasts");
+});
+
 test("index.js documents the contract next to the regexes", () => {
   assert.ok(
     INDEX.includes("STDOUT MARKER CONTRACT"),

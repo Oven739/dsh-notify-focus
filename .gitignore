@@ -5,3 +5,8 @@ _*.mjs
 _*.ps1
 _*.vbs
 .DS_Store
+
+# Local tooling installed beside the checkout, never part of the plugin:
+# BrowserSkill's bsk CLI (24 MB binary), the BSK_HOME the daemon keeps its
+# lock/IPC state in, and the wrapper that pins BSK_HOME for the DSH host.
+.tools/
